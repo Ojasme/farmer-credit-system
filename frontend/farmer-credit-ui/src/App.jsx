@@ -2,7 +2,19 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import "./App.css";
 
+// ✅ Separate APIs
+const ML_API = "http://localhost:8000";
+const OTP_API = "http://localhost:8001";
+
 function App() {
+  // 🔐 OTP STATES
+  const [isVerified, setIsVerified] = useState(false);
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpStep, setOtpStep] = useState(1);
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  // 🌾 ML STATES
   const [form, setForm] = useState({
     loan_amount: "",
     term_in_months: "",
@@ -21,6 +33,10 @@ function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // 🔐 Check if already verified
+
+
+  // 🌾 Load dropdown mappings
   useEffect(() => {
     setMappings({
       repayment_interval: ["monthly", "irregular", "bullet"],
@@ -46,10 +62,48 @@ function App() {
     });
   }, []);
 
+  // 🔐 SEND OTP
+  const sendOtp = async () => {
+    if (!email) {
+      alert("Please enter email");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      await axios.post(`${OTP_API}/send-otp`, { email });
+      alert("OTP Sent to your email!");
+      setOtpStep(2);
+    } catch (err) {
+      alert("Failed to send OTP");
+    }
+    setOtpLoading(false);
+  };
+
+  // 🔐 VERIFY OTP
+  const verifyOtp = async () => {
+    if (!otp) {
+      alert("Enter OTP");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      await axios.post(`${OTP_API}/verify-otp`, { email, otp });
+      localStorage.setItem("otp_verified", "true");
+      setIsVerified(true);
+    } catch (err) {
+      alert("Invalid OTP");
+    }
+    setOtpLoading(false);
+  };
+
+  // 🌾 Handle form change
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // 🌾 Submit ML form
   const submitForm = async () => {
     setLoading(true);
     setResult(null);
@@ -65,12 +119,9 @@ function App() {
         num_male_borrowers: Number(form.num_male_borrowers)
       };
 
-      const response = await axios.post(
-        "http://localhost:8000/predict",
-        payload
-      );
-
+      const response = await axios.post(`${ML_API}/predict`, payload);
       setResult(response.data);
+
     } catch (err) {
       alert("Backend error: " + err.message);
     }
@@ -78,6 +129,44 @@ function App() {
     setLoading(false);
   };
 
+  // 🔐 OTP SCREEN
+  if (!isVerified) {
+    return (
+      <div className="container">
+        <h1>📧 Email OTP Verification</h1>
+
+        {otpStep === 1 && (
+          <>
+            <input
+              type="email"
+              placeholder="Enter Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <button onClick={sendOtp} disabled={otpLoading}>
+              {otpLoading ? "Sending..." : "Send OTP"}
+            </button>
+          </>
+        )}
+
+        {otpStep === 2 && (
+          <>
+            <input
+              type="text"
+              placeholder="Enter OTP"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+            />
+            <button onClick={verifyOtp} disabled={otpLoading}>
+              {otpLoading ? "Verifying..." : "Verify OTP"}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // 🌾 MAIN ML APP
   return (
     <div className="container">
       <h1>🌾 Farmer Credit Assessment System</h1>
@@ -86,10 +175,12 @@ function App() {
       </p>
 
       <div className="form-grid">
-        {/* All form inputs remain unchanged */}
         {Object.keys(form).map((key) => (
           <div className="form-group" key={key}>
-            <label>{key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</label>
+            <label>
+              {key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+            </label>
+
             {mappings[key] ? (
               <select name={key} value={form[key]} onChange={handleChange}>
                 <option value="">Select</option>
