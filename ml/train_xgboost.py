@@ -1,6 +1,7 @@
 import pandas as pd
 import joblib
 import os
+import shap
 
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
@@ -36,7 +37,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 smote = SMOTE(random_state=42)
 X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
 
-# XGBoost Model (CONTROLLED CONFIDENCE)
+# XGBoost Model
 model = XGBClassifier(
     n_estimators=300,
     learning_rate=0.05,
@@ -62,8 +63,37 @@ print(f"Accuracy: {accuracy_score(y_test, y_pred):.3f}")
 print(f"AUC: {roc_auc_score(y_test, y_prob):.3f}")
 print(classification_report(y_test, y_pred))
 
-# Save model
-os.makedirs("../backend/model", exist_ok=True)
-joblib.dump(model, "../backend/model/credit_xgb.pkl")
+# ===============================
+# SAVE MODEL (FIXED PATH)
+# ===============================
+save_path = os.path.join(os.path.dirname(__file__), "model")
+os.makedirs(save_path, exist_ok=True)
 
-print("💾 Model saved successfully")
+joblib.dump(model, os.path.join(save_path, "credit_xgb_balanced.pkl"))
+
+print("💾 Model saved successfully at:", save_path)
+
+# ===============================
+# SHAP EXPLAINABILITY (FIXED)
+# ===============================
+print("🔍 Creating SHAP explainer...")
+
+# ✅ IMPORTANT FIX
+explainer = shap.TreeExplainer(model)
+
+# Use small sample for speed
+shap_values = explainer.shap_values(X_test.iloc[:100])
+
+# Save feature names (VERY IMPORTANT)
+joblib.dump(FEATURES, os.path.join(save_path, "feature_names.pkl"))
+
+# ❌ DO NOT save explainer (causes issues)
+# joblib.dump(explainer, ... )  <-- removed
+
+print("✅ SHAP setup ready")
+
+# Optional: SHAP plot
+try:
+    shap.summary_plot(shap_values, X_test.iloc[:100])
+except:
+    print("⚠️ Plot not shown (non-GUI environment)")

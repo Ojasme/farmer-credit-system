@@ -33,8 +33,8 @@ function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 🔐 Check if already verified
-
+  // ✅ NEW: SHAP TOGGLE STATE (ADDED)
+  const [showShap, setShowShap] = useState(false);
 
   // 🌾 Load dropdown mappings
   useEffect(() => {
@@ -121,6 +121,9 @@ function App() {
 
       const response = await axios.post(`${ML_API}/predict`, payload);
       setResult(response.data);
+
+      // ✅ RESET SHAP VIEW WHEN NEW RESULT COMES
+      setShowShap(false);
 
     } catch (err) {
       alert("Backend error: " + err.message);
@@ -215,6 +218,34 @@ function App() {
           }>
             <b>{result.decision}</b>
           </p>
+
+          {/* ✅ SHAP BUTTON (ADDED) */}
+          <button onClick={() => setShowShap(!showShap)}>
+            {showShap ? "Hide Explanation" : "Show Explanation"}
+          </button>
+
+          {/* ✅ SHAP DISPLAY (ADDED) */}
+          {showShap && result.shap_values && (
+            <div style={{ marginTop: "15px" }}>
+              <h3>Model Explanation</h3>
+
+              {Object.entries(result.shap_values)
+                .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+                .map(([feature, value]) => (
+                  <div key={feature}>
+                    <strong>{feature}</strong> :
+
+                    <span style={{
+                      color: value > 0 ? "green" : "red",
+                      marginLeft: "10px"
+                    }}>
+                      {value > 0 ? "⬆️ +" : "⬇️ "}
+                      {value.toFixed(3)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
     </div>

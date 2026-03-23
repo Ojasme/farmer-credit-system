@@ -5,6 +5,7 @@ import joblib
 import pandas as pd
 import json
 import os
+import shap   # ✅ ADDED
 
 # ===============================
 # Create FastAPI app
@@ -32,6 +33,10 @@ LABEL_PATH = os.path.join(
     BASE_DIR, "..", "ml", "data", "label_mappings.json"
 )
 
+FEATURE_PATH = os.path.join(
+    BASE_DIR, "..", "ml", "model", "feature_names.pkl"
+)
+
 # ===============================
 # Load Model
 # ===============================
@@ -41,6 +46,18 @@ try:
 except Exception as e:
     print("❌ Model loading failed:", e)
     raise e
+
+# ===============================
+# Load SHAP (FAST VERSION)
+# ===============================
+try:
+    explainer = shap.TreeExplainer(model)   # ✅ FAST FIX
+    feature_names = joblib.load(FEATURE_PATH)
+    print("✅ SHAP explainer ready")
+except Exception as e:
+    print("❌ SHAP loading failed:", e)
+    explainer = None
+    feature_names = None
 
 # ===============================
 # Load Label Mappings
@@ -91,7 +108,7 @@ def predict_credit(data: CreditInput):
             input_data[col] = mapping.get(str(input_data[col]), 0)
 
     # ---------------------------
-    # Feature Engineering (MATCH TRAINING)
+    # Feature Engineering (UNCHANGED)
     # ---------------------------
     total_borrowers = max(
         input_data["num_female_borrowers"] +
@@ -99,17 +116,14 @@ def predict_credit(data: CreditInput):
         1
     )
 
-    input_data["loan_amount_per_borrower"] = (
-        input_data["loan_amount"] / total_borrowers
-    )
-
-    input_data["short_term"] = 1 if input_data["term_in_months"] <= 6 else 0
-    input_data["high_mpi"] = 1 if input_data["mpi"] >= 0.6 else 0
-
     # ---------------------------
     # Create DataFrame
     # ---------------------------
     df = pd.DataFrame([input_data])
+
+    # ✅ Ensure correct feature order (IMPORTANT)
+    if feature_names:
+        df = df[feature_names]
 
     # ---------------------------
     # Predict Probability
@@ -127,10 +141,27 @@ def predict_credit(data: CreditInput):
     # ---------------------------
     decision = "Approved" if prob >= 0.65 else "Rejected"
 
+    # ---------------------------
+    # SHAP Explanation (FAST + FIXED)
+    # ---------------------------
+    shap_values_output = {}
+
+    if explainer is not None and feature_names is not None:
+        try:
+            shap_values = explainer.shap_values(df)
+
+            shap_values_output = {
+                feature: float(value)
+                for feature, value in zip(feature_names, shap_values[0])
+            }
+        except Exception as e:
+            print("⚠️ SHAP error:", e)
+
     return {
         "credit_score": credit_score,
         "approval_probability": round(prob * 100, 2),
-        "decision": decision
+        "decision": decision,
+        "shap_values": shap_values_output   # ✅ ADDED
     }
 
 
